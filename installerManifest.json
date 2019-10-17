@@ -1,0 +1,28 @@
+{
+  "namespace": "madenwala",
+  "repoOwner": "madenwala",
+  "repoName": "SmartThingsSugarmate",
+  "repoBranch": "master",
+  "name": "Sugarmate for SmartThings",
+  "author": "Mohammed Adenwala",
+  "description": "Sugarmate SmartApp for Samsung SmartThings Hub",
+  "category": "My Apps",
+  "bannerUrl": "https://raw.githubusercontent.com/madenwala/SmartThingsSugarate/master/icons/SugarmateBanner.png",
+  "forumUrl": "https://github.com/madenwala/SmartThingsSugarmate/blob/master/README.md",
+  "docUrl": "https://github.com/madenwala/SmartThingsSugarmate/blob/master/README.md",
+  "releaseType": "production",
+  "keywords": [ "sugarmate", "diabetic", "diabetes", "t1d", "dexcom", "glucose", "sugar" ],
+  "notes": "Nothing to show here (yet)",
+  "smartApps": {
+    "parent": {
+      "name": "Sugarmate",
+      "iconUrl": "https://raw.githubusercontent.com/madenwala/SmartThingsSugarmate/master/icons/Sugarmate.png",
+      "published": true,
+      "oAuth": true,
+      "version": "0.1.0",
+      "appSettings": {},
+      "appUrl": "smartapps/madenwala/sugarmate.src/sugarmate.groovy"
+    },
+    "children": []
+  }
+}
