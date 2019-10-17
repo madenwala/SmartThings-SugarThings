@@ -17,7 +17,7 @@ definition(
     name: "Sugarmate",
     namespace: "madenwala",
     author: "Mohammed Adenwala",
-    description: "Retrieves your Sugarmate GCM data.",
+    description: "Sugarmate for SmartThings retrieves your GCM data and allows automations based on your GCM data.",
     category: "My Apps",
     iconUrl: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
     iconX2Url: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
