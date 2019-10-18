@@ -23,6 +23,9 @@ definition(
     iconX2Url: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
     iconX3Url: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png")
 
+import groovy.time.TimeCategory;
+import groovy.time.*;
+
 preferences {
     section("external") {
         href(name: "hrefNotRequired",
@@ -53,22 +56,38 @@ def updated() {
 }
 
 def initialize() {
-	// TODO: subscribe to attributes, devices, locations, etc.
+    state.lastMessageID = 0
+    state.nextMessageDate = new Date() - 1;
     subscribe(app, appHandler)
     runEvery1Minute(refreshData)
 }
 
-import groovy.time.TimeCategory;
-import groovy.time.*;
-
 def appHandler(evt) {
-    log.debug "Sugarmate app event ${evt.name}:${evt.value} received"
-    def data = getData();
-    
-    log.debug convertTimespanToMinutes(data);
-    
-    def message = getAudioMessage(data);
-    speakAudioMessage(message);
+    log.debug "Sugarmate - App Event ${evt.value} received"
+    def data = getData();    
+    def message = getMessage(data);
+    speakMessage(message);
+}
+
+def refreshData(){
+	if(isPaused.equals(true)) {
+    	// Do nothing while paused
+        log.debug "Sugarmate - Paused"
+    } else {
+        // Check how old data is and then if old, get data
+        def nowDate = new Date();
+        def refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate);
+        if(refreshDate < nowDate) {
+        	def data = getData();
+            def message = getMessage(data);
+            speakMessage(message);
+        } else {
+            double totalSeconds = (refreshDate.time - nowDate.time) / 1000;
+            int minutes = (totalSeconds - (totalSeconds % 60)) / 60;    
+            double seconds = totalSeconds % 60;
+        	log.debug "Sugarmate - No refresh data for another ${minutes} minute(s) ${seconds.round(0)} second(s)"    
+        }
+    }
 }
 
 def getData() {
@@ -83,7 +102,10 @@ def getData() {
 	httpGet(params) { resp ->
         if(resp.status == 200){
             // get the data from the response body
-            log.debug "Sugarmate Data: ${resp.data}"
+            log.debug "Sugarmate - Data: ${resp.data}"
+            use(TimeCategory) {
+            	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 330.seconds;
+            } 
             return resp.data;
         } else {
             // get the status code of the response
@@ -93,25 +115,23 @@ def getData() {
 	}
 }
 
-def speakAudioMessage(message) {
-    if(isMuted != "true" && message) {
-    	log.debug "Sugarmate - Speaking: " + message;
-        speakers.speak(message)
-    }
-}
-
-def getAudioMessage(data) {
+def getMessage(data) {
 	if(data == null){
     	return "No data from SugarMate";
     }
     
-    /*
+    if(state.lastMessageID != data.x) {
+    	log.debug "Sugarmate - Updated data x:${data.x} was previously x:${state.lastMessageID}";
+        state.lastMessageID = data.x;
+    } else {
+    	log.debug "Sugarmate - getMessage with repeat data x:${data.x}";
+    }   
+    
     if(data.reading.contains('[OLD]')){
     	// TODO make counter based on preference
-    	return "No data from Sugarmate for the last ${convertTimespanToMinutes(data)} minutes";
+        return "${personName}'s data is now ${convertTimespanToMinutes(data)} minutes old. Last reading was ${data.value} ${trendWords[data.trend_words]}"
     } else {
     }
-    */
 
 	// TODO move to global variables
     def trendWords = [
@@ -129,51 +149,35 @@ def getAudioMessage(data) {
     
     // TODO send the appropriate response based on above
 	//return "${personName} is ${data.value} ${trendWords[data.trend_words]} as of ${data.time}";
-	return "${personName} is ${data.value} ${trendWords[data.trend_words]} from ${convertTimespanToMinutes(data)} minutes ago";
+    def minutesAgo = convertTimespanToMinutes(data);
+	def message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
+    if(minutesAgo >= 2) {
+    	message = message + " from ${minutesAgo} minutes ago";
+    }    
+    return message;
 }
 
-def shouldRefreshData(data){
-	if(data == null || data.timestamp)
-    	return true;
-    def tsStart = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp);
-    Date tsEnd;
-    use(TimeCategory) {
-    	tsEnd = tsStart + 310.seconds;
+def speakMessage(message) {
+    if(isMuted != "true" && message) {
+    	log.debug "Sugarmate - Speaking: " + message;
+        speakers.speak(message)
     }
-    return timeOfDayIsBetween(tsStart, tsEnd, new Date(), TimeZone.getTimeZone("UTC"));
 }
 
 def convertTimespanToMinutes(data) {
-	// TODO return (DateTime() - data.timestamp) to Minutes
-    def now = new Date();
-    def ts = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp);
-    double mins = (now.time - ts.time) / (60 * 1000);
-    int rounded = mins.round(0);
-    return rounded;
+    // Parse the data timestamp
+    def dataDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp);
+    def nowDate = new Date();
+    // Convert milliseconds to seconds
+    double seconds = (nowDate.time - dataDate.time) / 1000;
+    // Round sounds down to the minute(s)
+    int minutes = (seconds - (seconds % 60)) / 60;
+    // Return the minutes
+    return minutes;
 }
 
 def sendNotification(message){
     if (sendPush && message) {
         sendPush(message)
-    }
-}
-
-def refreshData(){
-	// TODO how to check a boolean value?
-	if(isPaused == "true") {
-    	// Do nothing while paused
-        log.debug "Sugarmate is paused"
-    } else {
-        // Check how old data is and then if old, get data
-        def data;
-        if(shouldRefreshData(data)) {
-        	data = getData();
-        } else {
-        	log.debug "Sugarmate - No need to get new data";
-        }
-        
-        // TODO based on value, determine if a message should be sent
-        def message = getAudioMessage(data);
-        speakAudioMessage(message);
     }
 }
