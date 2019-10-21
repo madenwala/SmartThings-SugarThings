@@ -63,6 +63,7 @@ def updated() {
 }
 
 def initialize() {
+	state.forceMessage = false
     state.lastMessageID = 0;
     state.nextMessageDate = new Date() - 1;
     
@@ -116,7 +117,7 @@ def getData() {
             // get the data from the response body
             log.debug "Sugarmate - Data: ${resp.data}"
             use(TimeCategory) {
-            	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 330.seconds;
+            	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 330.seconds;                	
             } 
             return resp.data;
         } else {
@@ -157,6 +158,7 @@ def getMessage(data) {
     ];
     
     if(data.reading.contains('[OLD]')) {
+    	state.forceMessage = true;
     	// TODO make counter based on preference 
         def returnMessage = skipNoDataRefresh == 0 || state.noDataCount % (skipNoDataRefresh + 1) == 1;
         state.noDataCount = state.noDataCount + 1;
@@ -166,33 +168,37 @@ def getMessage(data) {
         else 
         	message = "";
     } else {
+        if(state.forceMessage) {
+        	state.forceMessage = false;
+    		message = "Data restored. " + getDefaultMessage(data, false);
+        }
     	state.noDataCount = 0;
     }
 
-	if(message == null && data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
-    	def returnMessage = skipDoubleDownRefresh == 0 || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
+	if(data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
+    	def returnMessage = skipDoubleDownRefresh == 0 || data.reading.contains('[OLD]') || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
         state.doubleDownCount = state.doubleDownCount + 1;
-        
-        def minutesAgo = convertTimespanToMinutes(data);
-        message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
-        if(minutesAgo >= 2) {
-            message = message + " from ${minutesAgo} minutes ago";
-        }  
+        log.debug "doubleDownCount: " + state.doubleDownCount;
+        if(returnMessage) {
+            message = "WARNING! " + getDefaultMessage(data, true);
+        }
     } else {
     	state.doubleDownCount = 0;
     }
     
+    if(mesage == null && state.forceMessage) {
+    	state.forceMessage = false;
+    	message = getDefaultMessage(data, false);
+    }
+    
 	if(message == null) {
-
-		/*
-        message = getDefaultMessage(data);
-        */
+        //message = getDefaultMessage(data, false);
     }
 
     return message;
 }
 
-def getDefaultMessage(data) {
+def getDefaultMessage(data, showDelta) {
     // TODO move to global variables
     def trendWords = [
         "NONE":"",
@@ -212,6 +218,8 @@ def getDefaultMessage(data) {
     String message = null;
     def minutesAgo = convertTimespanToMinutes(data);
     message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
+    if(showDelta)
+    	message = message + " with delta ${data.delta}";
     if(minutesAgo >= 2) {
         message = message + " from ${minutesAgo} minutes ago";
     }    
