@@ -37,10 +37,13 @@ preferences {
         input "personName", "text", required: true, title: "Your Name"
         input "jsonUrl", "text", required: true, title: "Sugarmate External Json URL"
     }
-    section("Notifications") {
-        input "speakers", "capability.audioNotification", title: "Audio Devices", multiple: true
+    section("Automations") {
         input "isMuted", "boolean", title: "Mute"
         input "isPaused", "boolean", title: "Pause Automations"
+    }
+    section("Speakers") {
+        input "speakers", "capability.audioNotification", title: "Home Audio Devices", multiple: true
+        input "speakersNight", "capability.audioNotification", title: "Night Audio Devices", multiple: true
     }
     section("No data from GCM") {
     	input "skipNoDataRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
@@ -48,6 +51,14 @@ preferences {
     section("Double down from GCM") {
     	input "thresholdDoubleDown", "number", title: "If at/below GCM of level of...", range: "0..400", defaultValue: 150
     	input "skipDoubleDownRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
+    }
+    section("Single down from GCM") {
+    	input "thresholdSingleDown", "number", title: "If at/below GCM of level of...", range: "0..400", defaultValue: 100
+    	input "skipSingleDownRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
+    }
+    section("Too low from GCM") {
+    	input "thresholdTooLow", "number", title: "If at/below GCM of level of...", range: "0..400", defaultValue: 70
+    	input "skipTooLowRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
     }
 }
 
@@ -64,12 +75,12 @@ def updated() {
 
 def initialize() {
 	state.forceMessage = false
-    state.lastMessageID = 0;
     state.nextMessageDate = new Date() - 1;
     
     state.noDataCount = 0;
-    
     state.doubleDownCount = 0;
+    state.singleDownCount = 0;
+    state.tooLowCount = 0;
     
     subscribe(app, appHandler)
     runEvery1Minute(refreshData)
@@ -78,7 +89,7 @@ def initialize() {
 def appHandler(evt) {
     log.debug "Sugarmate - App Event ${evt.value} received"
     def data = getData();    
-    def message = getDefaultMessage(data)
+    def message = getDefaultMessage(data, false)
     audioSpeak(message);
 }
 
@@ -88,9 +99,11 @@ def refreshData(){
         log.debug "Sugarmate - Paused"
     } else {
         // Check how old data is and then if old, get data
-        def nowDate = new Date();
-        def refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate);
-        if(refreshDate < nowDate) {
+        Date nowDate = new Date();
+        Date refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate);
+        log.debug "Sugarmate - Next Refresh Date: ${state.nextMessageDate}   Right now its: ${nowDate}"; 
+        if(refreshDate < nowDate || true) {
+        	log.debug "Sugarmate - Refresh data is needed..."   
         	def data = getData();
             def message = getMessage(data);
             audioSpeak(message);
@@ -133,7 +146,7 @@ def getMessage(data) {
     String message = null;
     
 	if(data == null){
-    	return "No data from SugarMate";
+    	return "No data from Sugarmate";
     }
     
     if(state.lastMessageID != data.x) {
@@ -161,14 +174,14 @@ def getMessage(data) {
     	state.forceMessage = true;
     	// TODO make counter based on preference 
         def returnMessage = skipNoDataRefresh == 0 || state.noDataCount % (skipNoDataRefresh + 1) == 1;
-        state.noDataCount = state.noDataCount + 1;
+        state.noDataCount++;
         log.debug "noDataCount: " + state.noDataCount;
         if(returnMessage) 
         	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}."
         else 
         	message = "";
     } else {
-        if(state.forceMessage) {
+        if(state.forceMessage && state.noDataCount > 0) {
         	state.forceMessage = false;
     		message = "Data restored. " + getDefaultMessage(data, false);
         }
@@ -176,18 +189,42 @@ def getMessage(data) {
     }
 
 	if(data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
+    	state.forceMessage = true;
     	def returnMessage = skipDoubleDownRefresh == 0 || data.reading.contains('[OLD]') || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
-        state.doubleDownCount = state.doubleDownCount + 1;
+        state.doubleDownCount++;
         log.debug "doubleDownCount: " + state.doubleDownCount;
         if(returnMessage) {
-            message = "WARNING! " + getDefaultMessage(data, true);
+            message = "DOUBLE DOWN ALERT! " + getDefaultMessage(data, true);
         }
     } else {
     	state.doubleDownCount = 0;
     }
     
+    if(data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
+    	def returnMessage = skipSingleDownRefresh == 0 || data.reading.contains('[OLD]') || state.singleDownCount % (skipSingleDownRefresh + 1) == 0;
+        state.singleDownCount++;
+        log.debug "singleDownCount: " + state.singleDownCount;
+        if(returnMessage) {
+            message = "SINGLE DOWN ALERT! " + getDefaultMessage(data, true);
+        }
+    } else {
+    	state.singleDownCount = 0;
+    }
+    
+    if(message == null && data.value <= thresholdTooLow && data.delta < 0) {
+    	def returnMessage = skipTooLowRefresh == 0 || data.reading.contains('[OLD]') || state.tooLowCount % (skipTooLowRefresh + 1) == 0;
+        state.tooLowCount++;
+        log.debug "tooLowCount: " + state.tooLowCount;
+        if(returnMessage) {
+            message = "" + getDefaultMessage(data, true);
+        }
+    } else {
+    	state.tooLowCount = 0;
+    }
+    
     if(mesage == null && state.forceMessage) {
     	state.forceMessage = false;
+        log.debug "ForceMessage is true. Message is=" + message;
     	message = getDefaultMessage(data, false);
     }
     
@@ -218,8 +255,8 @@ def getDefaultMessage(data, showDelta) {
     String message = null;
     def minutesAgo = convertTimespanToMinutes(data);
     message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
-    if(showDelta)
-    	message = message + " with delta ${data.delta}";
+    if(showDelta && data.delta < 0)
+    	message = message + " ${data.delta}";
     if(minutesAgo >= 2) {
         message = message + " from ${minutesAgo} minutes ago";
     }    
@@ -231,7 +268,12 @@ def audioSpeak(message) {
     if(isMuted != "true" && message) {
     	log.debug "Sugarmate - Audio Speak: " + message;
         //speakers.playAnnouncementAll(message);
-        speakers.playTextAndRestore(message);
+        //speakers.playTextAndRestore(message);
+        
+        if(location.mode == "Night")
+            speakersNight.playTextAndRestore(message);
+        else
+            speakers.playTextAndRestore(message);
     }
 }
 
