@@ -37,10 +37,17 @@ preferences {
         input "personName", "text", required: true, title: "Your Name"
         input "jsonUrl", "text", required: true, title: "Sugarmate External Json URL"
     }
-    section() {
+    section("Notifications") {
         input "speakers", "capability.audioNotification", title: "Audio Devices", multiple: true
         input "isMuted", "boolean", title: "Mute"
         input "isPaused", "boolean", title: "Pause Automations"
+    }
+    section("No data from GCM") {
+    	input "skipNoDataRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
+    }
+    section("Double down from GCM") {
+    	input "thresholdDoubleDown", "number", title: "If at/below GCM of level of...", range: "0..400", defaultValue: 150
+    	input "skipDoubleDownRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
     }
 }
 
@@ -56,8 +63,13 @@ def updated() {
 }
 
 def initialize() {
-    state.lastMessageID = 0
+    state.lastMessageID = 0;
     state.nextMessageDate = new Date() - 1;
+    
+    state.noDataCount = 0;
+    
+    state.doubleDownCount = 0;
+    
     subscribe(app, appHandler)
     runEvery1Minute(refreshData)
 }
@@ -65,8 +77,8 @@ def initialize() {
 def appHandler(evt) {
     log.debug "Sugarmate - App Event ${evt.value} received"
     def data = getData();    
-    def message = getMessage(data);
-    speakMessage(message);
+    def message = getDefaultMessage(data)
+    audioSpeak(message);
 }
 
 def refreshData(){
@@ -80,7 +92,7 @@ def refreshData(){
         if(refreshDate < nowDate) {
         	def data = getData();
             def message = getMessage(data);
-            speakMessage(message);
+            audioSpeak(message);
         } else {
             double totalSeconds = (refreshDate.time - nowDate.time) / 1000;
             int minutes = (totalSeconds - (totalSeconds % 60)) / 60;    
@@ -116,24 +128,72 @@ def getData() {
 }
 
 def getMessage(data) {
+	
+    String message = null;
+    
 	if(data == null){
     	return "No data from SugarMate";
     }
     
     if(state.lastMessageID != data.x) {
-    	log.debug "Sugarmate - Updated data x:${data.x} was previously x:${state.lastMessageID}";
+    	//log.debug "Sugarmate - Updated data x:${data.x} was previously x:${state.lastMessageID}";
         state.lastMessageID = data.x;
     } else {
     	log.debug "Sugarmate - getMessage with repeat data x:${data.x}";
     }   
     
-    if(data.reading.contains('[OLD]')){
-    	// TODO make counter based on preference
-        return "${personName}'s data is now ${convertTimespanToMinutes(data)} minutes old. Last reading was ${data.value} ${trendWords[data.trend_words]}"
+    // TODO move to global variables
+    def trendWords = [
+        "NONE":"",
+        "NOT_COMPUTABLE":"",
+        "OUT_OF_RANGE":"",
+        "DOUBLE_UP":"double-arrow up", 
+        "SINGLE_UP":"up", 
+        "FORTY_FIVE_UP":"slight up", 
+        "FLAT":"steady", 
+        "FORTY_FIVE_DOWN":"slight down", 
+        "SINGLE_DOWN":"down", 
+        "DOUBLE_DOWN":"double-arrow down"
+    ];
+    
+    if(data.reading.contains('[OLD]')) {
+    	// TODO make counter based on preference 
+        def returnMessage = skipNoDataRefresh == 0 || state.noDataCount % (skipNoDataRefresh + 1) == 1;
+        state.noDataCount = state.noDataCount + 1;
+        log.debug "noDataCount: " + state.noDataCount;
+        if(returnMessage) 
+        	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}."
+        else 
+        	message = "";
     } else {
+    	state.noDataCount = 0;
     }
 
-	// TODO move to global variables
+	if(message == null && data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
+    	def returnMessage = skipDoubleDownRefresh == 0 || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
+        state.doubleDownCount = state.doubleDownCount + 1;
+        
+        def minutesAgo = convertTimespanToMinutes(data);
+        message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
+        if(minutesAgo >= 2) {
+            message = message + " from ${minutesAgo} minutes ago";
+        }  
+    } else {
+    	state.doubleDownCount = 0;
+    }
+    
+	if(message == null) {
+
+		/*
+        message = getDefaultMessage(data);
+        */
+    }
+
+    return message;
+}
+
+def getDefaultMessage(data) {
+    // TODO move to global variables
     def trendWords = [
         "NONE":"",
         "NOT_COMPUTABLE":"",
@@ -148,19 +208,22 @@ def getMessage(data) {
     ];
     
     // TODO send the appropriate response based on above
-	//return "${personName} is ${data.value} ${trendWords[data.trend_words]} as of ${data.time}";
+    //return "${personName} is ${data.value} ${trendWords[data.trend_words]} as of ${data.time}";
+    String message = null;
     def minutesAgo = convertTimespanToMinutes(data);
-	def message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
+    message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     if(minutesAgo >= 2) {
-    	message = message + " from ${minutesAgo} minutes ago";
+        message = message + " from ${minutesAgo} minutes ago";
     }    
     return message;
 }
 
-def speakMessage(message) {
+def audioSpeak(message) {
+    log.debug "Sugarmate - Message: " + message;
     if(isMuted != "true" && message) {
-    	log.debug "Sugarmate - Speaking: " + message;
-        speakers.speak(message)
+    	log.debug "Sugarmate - Audio Speak: " + message;
+        //speakers.playAnnouncementAll(message);
+        speakers.playTextAndRestore(message);
     }
 }
 
