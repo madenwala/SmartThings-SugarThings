@@ -73,7 +73,9 @@ def updated() {
 	initialize()
 }
 
+
 def initialize() {
+	state.OLD_MESSAGE = "[OLD]"
 	state.forceMessage = false
     state.nextMessageDate = new Date() - 1;
     
@@ -87,32 +89,41 @@ def initialize() {
 }
 
 def appHandler(evt) {
-    log.debug "Sugarmate - App Event ${evt.value} received"
-    def data = getData();    
-    def message = getDefaultMessage(data, false)
-    audioSpeak(message);
+	try {
+        log.debug "Sugarmate - App Event ${evt.value} received"
+    	def data = getData();    
+    	def message = getDefaultMessage(data, false)
+    	audioSpeak(message)
+    }
+    catch(ex) {
+    	log.error "Sugarmate - Could not retrieve data: " + ex;
+    }
 }
 
 def refreshData(){
-	if(isPaused.equals(true)) {
-    	// Do nothing while paused
-        log.debug "Sugarmate - Paused"
-    } else {
-        // Check how old data is and then if old, get data
-        Date nowDate = new Date();
-        Date refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate);
-        log.debug "Sugarmate - Next Refresh Date: ${state.nextMessageDate}   Right now its: ${nowDate}"; 
-        if(refreshDate < nowDate || true) {
-        	log.debug "Sugarmate - Refresh data is needed..."   
-        	def data = getData();
-            def message = getMessage(data);
-            audioSpeak(message);
+	try {
+        if(isPaused.equals(true)) {
+            // Do nothing while paused
+            log.debug "Sugarmate - Paused"
         } else {
-            double totalSeconds = (refreshDate.time - nowDate.time) / 1000;
-            int minutes = (totalSeconds - (totalSeconds % 60)) / 60;    
-            double seconds = totalSeconds % 60;
-        	log.debug "Sugarmate - No refresh data for another ${minutes} minute(s) ${seconds.round(0)} second(s)"    
+            // Check how old data is and then if old, get data
+            Date nowDate = new Date();
+            Date refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate);
+            if(refreshDate < nowDate) {
+                log.info "Sugarmate - Refresh data..."   
+                def data = getData();
+                def message = getMessage(data);
+                audioSpeak(message);
+            } else {
+                double totalSeconds = (refreshDate.time - nowDate.time) / 1000;
+                int minutes = (totalSeconds - (totalSeconds % 60)) / 60;    
+                double seconds = totalSeconds % 60;
+                log.debug "Sugarmate - No refresh data for another ${minutes} minute(s) ${seconds.round(0)} second(s) Next: ${state.nextMessageDate} Current: ${nowDate}"; 
+            }
         }
+    }
+    catch(ex) {
+    	log.error "Sugarmate - Could not refresh data: " + ex;
     }
 }
 
@@ -130,7 +141,9 @@ def getData() {
             // get the data from the response body
             log.debug "Sugarmate - Data: ${resp.data}"
             use(TimeCategory) {
-            	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 330.seconds;                	
+            	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 330.seconds
+                def nowDate = new Date()
+                log.debug "Sugarmate - NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
             } 
             return resp.data;
         } else {
@@ -143,18 +156,9 @@ def getData() {
 
 def getMessage(data) {
 	
-    String message = null;
-    
-	if(data == null){
+	if(data == null)
     	return "No data from Sugarmate";
-    }
-    
-    if(state.lastMessageID != data.x) {
-    	//log.debug "Sugarmate - Updated data x:${data.x} was previously x:${state.lastMessageID}";
-        state.lastMessageID = data.x;
-    } else {
-    	log.debug "Sugarmate - getMessage with repeat data x:${data.x}";
-    }   
+    String message = null;
     
     // TODO move to global variables
     def trendWords = [
@@ -170,7 +174,7 @@ def getMessage(data) {
         "DOUBLE_DOWN":"double-arrow down"
     ];
     
-    if(data.reading.contains('[OLD]')) {
+    if(data.reading.contains(state.OLD_MESSAGE)) {
     	state.forceMessage = true;
     	// TODO make counter based on preference 
         def returnMessage = skipNoDataRefresh == 0 || state.noDataCount % (skipNoDataRefresh + 1) == 1;
@@ -190,39 +194,36 @@ def getMessage(data) {
 
 	if(data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
     	state.forceMessage = true;
-    	def returnMessage = skipDoubleDownRefresh == 0 || data.reading.contains('[OLD]') || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
+    	def returnMessage = skipDoubleDownRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
         state.doubleDownCount++;
         log.debug "doubleDownCount: " + state.doubleDownCount;
-        if(returnMessage) {
+        if(returnMessage)
             message = "DOUBLE DOWN ALERT! " + getDefaultMessage(data, true);
-        }
     } else {
     	state.doubleDownCount = 0;
     }
     
     if(data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
-    	def returnMessage = skipSingleDownRefresh == 0 || data.reading.contains('[OLD]') || state.singleDownCount % (skipSingleDownRefresh + 1) == 0;
+    	def returnMessage = skipSingleDownRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.singleDownCount % (skipSingleDownRefresh + 1) == 0;
         state.singleDownCount++;
         log.debug "singleDownCount: " + state.singleDownCount;
-        if(returnMessage) {
+        if(returnMessage)
             message = "SINGLE DOWN ALERT! " + getDefaultMessage(data, true);
-        }
     } else {
     	state.singleDownCount = 0;
     }
     
     if(message == null && data.value <= thresholdTooLow && data.delta < 0) {
-    	def returnMessage = skipTooLowRefresh == 0 || data.reading.contains('[OLD]') || state.tooLowCount % (skipTooLowRefresh + 1) == 0;
+    	def returnMessage = skipTooLowRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % (skipTooLowRefresh + 1) == 0;
         state.tooLowCount++;
         log.debug "tooLowCount: " + state.tooLowCount;
-        if(returnMessage) {
+        if(returnMessage)
             message = "" + getDefaultMessage(data, true);
-        }
     } else {
     	state.tooLowCount = 0;
     }
     
-    if(mesage == null && state.forceMessage) {
+    if(message == null && state.forceMessage) {
     	state.forceMessage = false;
         log.debug "ForceMessage is true. Message is=" + message;
     	message = getDefaultMessage(data, false);
@@ -257,20 +258,19 @@ def getDefaultMessage(data, showDelta) {
     message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     if(showDelta && data.delta < 0)
     	message = message + " ${data.delta}";
-    if(minutesAgo >= 2) {
+    if(minutesAgo >= 2)
         message = message + " from ${minutesAgo} minutes ago";
-    }    
     return message;
 }
 
 def audioSpeak(message) {
-    log.debug "Sugarmate - Message: " + message;
+    log.info "Sugarmate - Message: " + message;
     if(isMuted != "true" && message) {
     	log.debug "Sugarmate - Audio Speak: " + message;
         //speakers.playAnnouncementAll(message);
         //speakers.playTextAndRestore(message);
         
-        if(location.mode == "Night")
+        if(location.mode == 'Night')
             speakersNight.playTextAndRestore(message);
         else
             speakers.playTextAndRestore(message);
@@ -289,8 +289,9 @@ def convertTimespanToMinutes(data) {
     return minutes;
 }
 
+/*
 def sendNotification(message){
-    if (sendPush && message) {
+    if (sendPush && message)
         sendPush(message)
-    }
 }
+*/
