@@ -42,23 +42,23 @@ preferences {
         input "isPaused", "boolean", title: "Pause Automations"
     }
     section("Speakers") {
-        input "speakers", "capability.audioNotification", title: "Home Audio Devices", multiple: true
-        input "speakersNight", "capability.audioNotification", title: "Night Audio Devices", multiple: true
+        input "speakers", "capability.audioNotification", title: "Audio Devices", multiple: true
+        input "speakersNight", "capability.audioNotification", title: "Audio Devices for Night Mode", multiple: true
     }
-    section("No data from GCM") {
-    	input "skipNoDataRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
+    section("No Data") {
+    	input "skipNoDataRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
     }
-    section("Double down from GCM") {
-    	input "thresholdDoubleDown", "number", title: "If at/below GCM of level of...", range: "0..400", defaultValue: 150
-    	input "skipDoubleDownRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
+    section("Double-Arrow Down") {
+    	input "thresholdDoubleDown", "number", title: "GCM level below for notification", range: "0..400", defaultValue: 150
+    	input "skipDoubleDownRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
     }
-    section("Single down from GCM") {
-    	input "thresholdSingleDown", "number", title: "If at/below GCM of level of...", range: "0..400", defaultValue: 100
-    	input "skipSingleDownRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
+    section("Single-Arrow Down") {
+    	input "thresholdSingleDown", "number", title: "GCM level below for notification", range: "0..400", defaultValue: 100
+    	input "skipSingleDownRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
     }
-    section("Too low from GCM") {
-    	input "thresholdTooLow", "number", title: "If at/below GCM of level of...", range: "0..400", defaultValue: 70
-    	input "skipTooLowRefresh", "number", title: "Number of refreshes to skip between messages?", range: "0..20", defaultValue: 0
+    section("Urgent-Low") {
+    	input "thresholdTooLow", "number", title: "Set the level at which you have symptoms of low blood sugar", range: "40..100", defaultValue: 70
+    	input "skipTooLowRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
     }
 }
 
@@ -77,7 +77,7 @@ def updated() {
 def initialize() {
 	state.OLD_MESSAGE = "[OLD]"
 	state.forceMessage = false
-    state.nextMessageDate = new Date() - 1;
+    state.nextMessageDate = new Date();
     
     state.noDataCount = 0;
     state.doubleDownCount = 0;
@@ -141,7 +141,10 @@ def getData() {
             // get the data from the response body
             log.debug "Sugarmate - Data: ${resp.data}"
             use(TimeCategory) {
-            	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 330.seconds
+            	if(resp.data.reading.contains(state.OLD_MESSAGE))
+                	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate) + 325.seconds
+                else
+                	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 325.seconds                    
                 def nowDate = new Date()
                 log.debug "Sugarmate - NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
             } 
@@ -178,7 +181,7 @@ def getMessage(data) {
     	state.forceMessage = true;
     	// TODO make counter based on preference 
         def returnMessage = skipNoDataRefresh == 0 || state.noDataCount % (skipNoDataRefresh + 1) == 1;
-        state.noDataCount++;
+        state.noDataCount = state.noDataCount + 1;
         log.debug "noDataCount: " + state.noDataCount;
         if(returnMessage) 
         	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}."
@@ -195,7 +198,7 @@ def getMessage(data) {
 	if(data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
     	state.forceMessage = true;
     	def returnMessage = skipDoubleDownRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
-        state.doubleDownCount++;
+        state.doubleDownCount = state.doubleDownCount + 1;
         log.debug "doubleDownCount: " + state.doubleDownCount;
         if(returnMessage)
             message = "DOUBLE DOWN ALERT! " + getDefaultMessage(data, true);
@@ -205,7 +208,7 @@ def getMessage(data) {
     
     if(data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
     	def returnMessage = skipSingleDownRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.singleDownCount % (skipSingleDownRefresh + 1) == 0;
-        state.singleDownCount++;
+        state.singleDownCount = state.singleDownCount + 1;
         log.debug "singleDownCount: " + state.singleDownCount;
         if(returnMessage)
             message = "SINGLE DOWN ALERT! " + getDefaultMessage(data, true);
@@ -215,7 +218,7 @@ def getMessage(data) {
     
     if(message == null && data.value <= thresholdTooLow && data.delta < 0) {
     	def returnMessage = skipTooLowRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % (skipTooLowRefresh + 1) == 0;
-        state.tooLowCount++;
+        state.tooLowCount = state.tooLowCount + 1;
         log.debug "tooLowCount: " + state.tooLowCount;
         if(returnMessage)
             message = "" + getDefaultMessage(data, true);
