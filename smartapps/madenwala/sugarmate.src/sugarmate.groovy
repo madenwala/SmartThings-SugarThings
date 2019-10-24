@@ -92,21 +92,23 @@ def initialize() {
 }
 
 def appHandler(evt) {
-	try {
+	//try {
         log.debug "Sugarmate - App Event ${evt.value} received"
     	def data = getData()
     	def message = getMessage(data)
         if(message == null)
         	message = getDefaultMessage(data, false)
     	audioSpeak(message)
+        /*
     }
     catch(ex) {
     	log.error "Sugarmate - Could not retrieve data: " + ex
     }
+    */
 }
 
 def refreshData(){
-	try {
+	//try {
         if(isPaused.equals(true)) {
             // Do nothing while paused
             log.debug "Sugarmate - Paused"
@@ -126,10 +128,12 @@ def refreshData(){
                 log.debug "Sugarmate - No refresh data for another ${minutes} minute(s) ${seconds.round(0)} second(s) Next: ${state.nextMessageDate} Current: ${nowDate}"; 
             }
         }
+        /*
     }
     catch(ex) {
     	log.error "Sugarmate - Could not refresh data: " + ex;
     }
+    */
 }
 
 def getData() {
@@ -167,28 +171,14 @@ def getMessage(data) {
 	if(data == null)
     	return "No data from Sugarmate";
     String message = null;
-
-    // TODO move to global variables
-    def trendWords = [
-        "NONE":"",
-        "NOT_COMPUTABLE":"",
-        "OUT_OF_RANGE":"",
-        "DOUBLE_UP":"double-arrow up", 
-        "SINGLE_UP":"up", 
-        "FORTY_FIVE_UP":"slight up", 
-        "FLAT":"steady", 
-        "FORTY_FIVE_DOWN":"slight down", 
-        "SINGLE_DOWN":"down", 
-        "DOUBLE_DOWN":"double-arrow down"
-    ];
     
-    if(!data.reading.contains(state.OLD_MESSAGE)) {        
+    if(data.reading.contains(state.OLD_MESSAGE)) {        
     	state.forceMessage = true
         state.noDataCount = state.noDataCount + 1
         log.debug "noDataCount: " + state.noDataCount
     	double dataMod = skipNoDataRefresh / 5
         if(state.noDataCount % dataMod.round(0) == 0) 
-        	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}."
+        	message = getDefaultMessage(data, false)
         else 
         	message = "";
     } else {
@@ -240,7 +230,7 @@ def getMessage(data) {
 }
 
 def getDefaultMessage(data, showDelta) {
-    // TODO move to global variables
+
     def trendWords = [
         "NONE":"",
         "NOT_COMPUTABLE":"",
@@ -254,15 +244,19 @@ def getDefaultMessage(data, showDelta) {
         "DOUBLE_DOWN":"double-arrow down"
     ];
     
-    // TODO send the appropriate response based on above
     String message = null;
-    def minutesAgo = convertTimespanToMinutes(data);
+    if(data.reading.contains(state.OLD_MESSAGE))
+    	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}."
+    else
+    	message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     
-    message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     if(showDelta && data.delta < 0)
     	message = message + " ${data.delta}";
+        
+    def minutesAgo = convertTimespanToMinutes(data);
     if(minutesAgo >= 2)
         message = message + " from ${minutesAgo} minutes ago";
+        
     return message;
 }
 
