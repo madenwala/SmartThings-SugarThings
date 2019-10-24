@@ -37,7 +37,7 @@ preferences {
 
         input "jsonUrl", "text", required: true, title: "Sugarmate External Json URL"
     }
-    section("Name") {
+    section("Personalization") {
         input "personName", "text", required: true, title: "Your Name"
     }
     section("Automations") {
@@ -213,8 +213,8 @@ def getMessage(data) {
     if(message == null && data.value <= thresholdTooLow && data.delta < 0) {
         state.tooLowCount = state.tooLowCount + 1;
         log.debug "tooLowCount: " + state.tooLowCount;
-    	double dataMod = (skipTooLowRefresh / 5).round(0)
-        if(data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % dataMod == 0)
+    	double dataMod = skipTooLowRefresh / 5
+        if(data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % dataMod.round(0) == 0)
             message = "Urgent Low. " + getDefaultMessage(data, true);
     } else {
     	state.tooLowCount = 0;
