@@ -27,39 +27,60 @@ import groovy.time.TimeCategory;
 import groovy.time.*;
 
 preferences {
-    section("Data") {
-        href(name: "hrefNotRequired",
+    section("CGM Data") {
+        href(name: "websiteSugarmate",
+             title: "Create Sugarmate Account",
+             required: false,
+             style: "external",
+             url: "https://sugarmate.io",
+             description: "CGM data is made available from Sugarmate.io, a platform that retrieves your CGM data from Dexcom. You will need a Sugarmate account to run this SmartApp."
+             )  
+        
+        href(name: "jsonWebsite",
              title: "Sugarmate Website",
              required: false,
              style: "external",
              url: "https://sugarmate.io/home/settings",
-             description: "Retrieve your personal Sugarmate External Json URL by logging into your account. Once authenticated, go to Menu > Settings and scroll to the External JSON section and copy and paste your URL below.")
+             description: "Retrieve your personal Sugarmate External JSON URL by logging into your Sugarmate account. Once authenticated, go to Menu > Settings and scroll to the External JSON section and copy and paste your URL below."
+             )
 
         input "jsonUrl", "text", required: true, title: "Sugarmate External Json URL"
     }
     section("Personalization") {
-        input "personName", "text", required: true, title: "Your Name"
+    	paragraph "The name of the person will be announced during audio notifications."
+        input "personName", "text", required: true, title: "Name"
     }
     section("Automations") {
-        input "isMuted", "boolean", title: "Mute Audio"
+    	paragraph "Set to ON if you need to mute all audio."
+        input "isMuted", "boolean", title: "Mute"
         input "isPaused", "boolean", title: "Pause Automations", hideWhenEmpty: true
     }
-    section("Devices") {
-        input "speakers", "capability.audioNotification", title: "Audio Devices", multiple: true
-        input "speakersNight", "capability.audioNotification", title: "Audio Devices for Night Mode", multiple: true
+    section("Audio Devices") {
+    	paragraph "Audio notifications will play on these devices. You can choose which modes this app works at the bottom of this page."
+        input "audioSpeakers", "capability.audioNotification", title: "Audio Devices", multiple: true, required: false
+        input "alexaSpeakers", "device.echoSpeaksDevice", title: "Alexa Devices", multiple: true, required: false
+    }
+    section("Audio Devices during Night mode") {
+    	paragraph "If this app supports Night mode, then when in Night mode, audio notifications will only play on these devices."
+        input "audioSpeakersNight", "capability.audioNotification", title: "Audio Devices", multiple: true, required: false
+        input "alexaSpeakersNight", "device.echoSpeaksDevice", title: "Alexa Devices", multiple: true, required: false
     }
     section("Audio Notification for NO DATA") {
+    	paragraph "When there is no data from your CGM, meaning that CGM data is not being shared to Sugarmate, then we can announce that there is no data."
     	input "skipNoDataRefresh", "number", title: "Minutes to wait between notification", description: "hello world", range: "5..60", defaultValue: 5
     }
     section("Audio Notification for URGENT-LOW") {
-    	input "thresholdTooLow", "number", title: "Set the level at which you have symptoms of low blood sugar", range: "40..100", defaultValue: 70
+    	paragraph "CGM data is below where it should be, an announcement will be made."
+        input "thresholdTooLow", "number", title: "Set the level at which you have symptoms of low blood sugar", range: "40..100", defaultValue: 70
     	input "skipTooLowRefresh", "number", title: "Minutes to wait between notifications", range: "5..60", defaultValue: 5
     }
     section("Audio Notification for SINGLE-ARROW DOWN") {
-    	input "thresholdSingleDown", "number", title: "CGM level below", range: "0..400", defaultValue: 100
+    	paragraph "When CGM data is single-arrow down below the specified range, an annoucement will be made indicating that the CGM is falling."
+        input "thresholdSingleDown", "number", title: "CGM level below", range: "0..400", defaultValue: 100
     	input "skipSingleDownRefresh", "number", title: "Minutes to wait between notifications", range: "5..60", defaultValue: 10
     }
     section("Audio Notification for DOUBLE-ARROW DOWN") {
+    	paragraph "When CGM data is double-arrow down below the specified range, an annoucement will be made indicating that the CGM is falling too fast."
     	input "thresholdDoubleDown", "number", title: "CGM level below", range: "0..400", defaultValue: 150
     	input "skipDoubleDownRefresh", "number", title: "Minutes to wait until next notification", range: "5..60", defaultValue: 5
     }
@@ -264,12 +285,14 @@ def audioSpeak(message) {
     log.info "Sugarmate - Message: " + message;
     if(isMuted != "true" && message) {
     	log.debug "Sugarmate - Audio Speak: " + message;
-        //speakers.playAnnouncementAll(message);
-        //speakers.playTextAndRestore(message);        
-        if(location.mode == 'Night')
-            speakersNight.playTextAndRestore(message);
-        else
-            speakers.playTextAndRestore(message);
+        if(location.mode == 'Night') {
+            audioSpeakersNight*.playTextAndRestore(message)
+            alexaSpeakersNight*.playAnnouncement(message)
+        }
+        else {
+            audioSpeakers*.playTextAndRestore(message)
+            alexaSpeakers*.playAnnouncement(message)
+        }
     }
 }
 
