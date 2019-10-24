@@ -27,38 +27,41 @@ import groovy.time.TimeCategory;
 import groovy.time.*;
 
 preferences {
-    section("external") {
+    section("Data") {
         href(name: "hrefNotRequired",
              title: "Sugarmate Website",
              required: false,
              style: "external",
              url: "https://sugarmate.io/home/settings",
              description: "Retrieve your personal Sugarmate External Json URL by logging into your account. Once authenticated, go to Menu > Settings and scroll to the External JSON section and copy and paste your URL below.")
-        input "personName", "text", required: true, title: "Your Name"
+
         input "jsonUrl", "text", required: true, title: "Sugarmate External Json URL"
     }
-    section("Automations") {
-        input "isMuted", "boolean", title: "Mute"
-        input "isPaused", "boolean", title: "Pause Automations"
+    section("Name") {
+        input "personName", "text", required: true, title: "Your Name"
     }
-    section("Speakers") {
+    section("Automations") {
+        input "isMuted", "boolean", title: "Mute Audio"
+        input "isPaused", "boolean", title: "Pause Automations", hideWhenEmpty: true
+    }
+    section("Devices") {
         input "speakers", "capability.audioNotification", title: "Audio Devices", multiple: true
         input "speakersNight", "capability.audioNotification", title: "Audio Devices for Night Mode", multiple: true
     }
-    section("No Data") {
-    	input "skipNoDataRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
+    section("Audio Notification for NO DATA") {
+    	input "skipNoDataRefresh", "number", title: "Minutes to wait between notification", description: "hello world", range: "5..60", defaultValue: 5
     }
-    section("Double-Arrow Down") {
-    	input "thresholdDoubleDown", "number", title: "GCM level below for notification", range: "0..400", defaultValue: 150
-    	input "skipDoubleDownRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
-    }
-    section("Single-Arrow Down") {
-    	input "thresholdSingleDown", "number", title: "GCM level below for notification", range: "0..400", defaultValue: 100
-    	input "skipSingleDownRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
-    }
-    section("Urgent-Low") {
+    section("Audio Notification for URGENT-LOW") {
     	input "thresholdTooLow", "number", title: "Set the level at which you have symptoms of low blood sugar", range: "40..100", defaultValue: 70
-    	input "skipTooLowRefresh", "number", title: "Minutes to wait until next notification", range: "0..60", defaultValue: 0
+    	input "skipTooLowRefresh", "number", title: "Minutes to wait between notifications", range: "5..60", defaultValue: 5
+    }
+    section("Audio Notification for SINGLE-ARROW DOWN") {
+    	input "thresholdSingleDown", "number", title: "CGM level below", range: "0..400", defaultValue: 100
+    	input "skipSingleDownRefresh", "number", title: "Minutes to wait between notifications", range: "5..60", defaultValue: 10
+    }
+    section("Audio Notification for DOUBLE-ARROW DOWN") {
+    	input "thresholdDoubleDown", "number", title: "CGM level below", range: "0..400", defaultValue: 150
+    	input "skipDoubleDownRefresh", "number", title: "Minutes to wait until next notification", range: "5..60", defaultValue: 5
     }
 }
 
@@ -91,12 +94,14 @@ def initialize() {
 def appHandler(evt) {
 	try {
         log.debug "Sugarmate - App Event ${evt.value} received"
-    	def data = getData();    
-    	def message = getDefaultMessage(data, false)
+    	def data = getData()
+    	def message = getMessage(data)
+        if(message == null)
+        	message = getDefaultMessage(data, false)
     	audioSpeak(message)
     }
     catch(ex) {
-    	log.error "Sugarmate - Could not retrieve data: " + ex;
+    	log.error "Sugarmate - Could not retrieve data: " + ex
     }
 }
 
@@ -162,7 +167,7 @@ def getMessage(data) {
 	if(data == null)
     	return "No data from Sugarmate";
     String message = null;
-    
+
     // TODO move to global variables
     def trendWords = [
         "NONE":"",
@@ -177,13 +182,12 @@ def getMessage(data) {
         "DOUBLE_DOWN":"double-arrow down"
     ];
     
-    if(data.reading.contains(state.OLD_MESSAGE)) {
-    	state.forceMessage = true;
-    	// TODO make counter based on preference 
-        def returnMessage = skipNoDataRefresh == 0 || state.noDataCount % (skipNoDataRefresh + 1) == 1;
-        state.noDataCount = state.noDataCount + 1;
-        log.debug "noDataCount: " + state.noDataCount;
-        if(returnMessage) 
+    if(!data.reading.contains(state.OLD_MESSAGE)) {        
+    	state.forceMessage = true
+        state.noDataCount = state.noDataCount + 1
+        log.debug "noDataCount: " + state.noDataCount
+    	double dataMod = skipNoDataRefresh / 5
+        if(state.noDataCount % dataMod.round(0) == 0) 
         	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}."
         else 
         	message = "";
@@ -197,31 +201,31 @@ def getMessage(data) {
 
 	if(data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
     	state.forceMessage = true;
-    	def returnMessage = skipDoubleDownRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.doubleDownCount % (skipDoubleDownRefresh + 1) == 0;
-        state.doubleDownCount = state.doubleDownCount + 1;
-        log.debug "doubleDownCount: " + state.doubleDownCount;
-        if(returnMessage)
+        state.doubleDownCount = state.doubleDownCount + 1
+        log.debug "doubleDownCount: " + state.doubleDownCount
+    	double dataMod = skipDoubleDownRefresh / 5
+        if(data.reading.contains(state.OLD_MESSAGE) || state.doubleDownCount % dataMod.round(0) == 0)
             message = "DOUBLE DOWN ALERT! " + getDefaultMessage(data, true);
     } else {
-    	state.doubleDownCount = 0;
+        state.doubleDownCount = 0;
     }
     
     if(data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
-    	def returnMessage = skipSingleDownRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.singleDownCount % (skipSingleDownRefresh + 1) == 0;
         state.singleDownCount = state.singleDownCount + 1;
         log.debug "singleDownCount: " + state.singleDownCount;
-        if(returnMessage)
+    	double dataMod = skipSingleDownRefresh / 5
+        if(data.reading.contains(state.OLD_MESSAGE) || state.singleDownCount % dataMod.round(0) == 0)
             message = "SINGLE DOWN ALERT! " + getDefaultMessage(data, true);
     } else {
     	state.singleDownCount = 0;
     }
     
     if(message == null && data.value <= thresholdTooLow && data.delta < 0) {
-    	def returnMessage = skipTooLowRefresh == 0 || data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % (skipTooLowRefresh + 1) == 0;
         state.tooLowCount = state.tooLowCount + 1;
         log.debug "tooLowCount: " + state.tooLowCount;
-        if(returnMessage)
-            message = "" + getDefaultMessage(data, true);
+    	double dataMod = (skipTooLowRefresh / 5).round(0)
+        if(data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % dataMod == 0)
+            message = "Urgent Low. " + getDefaultMessage(data, true);
     } else {
     	state.tooLowCount = 0;
     }
@@ -230,10 +234,6 @@ def getMessage(data) {
     	state.forceMessage = false;
         log.debug "ForceMessage is true. Message is=" + message;
     	message = getDefaultMessage(data, false);
-    }
-    
-	if(message == null) {
-        //message = getDefaultMessage(data, false);
     }
 
     return message;
@@ -255,9 +255,9 @@ def getDefaultMessage(data, showDelta) {
     ];
     
     // TODO send the appropriate response based on above
-    //return "${personName} is ${data.value} ${trendWords[data.trend_words]} as of ${data.time}";
     String message = null;
     def minutesAgo = convertTimespanToMinutes(data);
+    
     message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     if(showDelta && data.delta < 0)
     	message = message + " ${data.delta}";
@@ -271,8 +271,7 @@ def audioSpeak(message) {
     if(isMuted != "true" && message) {
     	log.debug "Sugarmate - Audio Speak: " + message;
         //speakers.playAnnouncementAll(message);
-        //speakers.playTextAndRestore(message);
-        
+        //speakers.playTextAndRestore(message);        
         if(location.mode == 'Night')
             speakersNight.playTextAndRestore(message);
         else
@@ -291,10 +290,3 @@ def convertTimespanToMinutes(data) {
     // Return the minutes
     return minutes;
 }
-
-/*
-def sendNotification(message){
-    if (sendPush && message)
-        sendPush(message)
-}
-*/
