@@ -70,6 +70,11 @@ preferences {
     	paragraph "When there is no data from your CGM, meaning that CGM data is not being shared to Sugarmate, then we can announce that there is no data."
     	input "skipNoDataRefresh", "number", title: "Minutes to wait between notification", description: "hello world", range: "5..60", defaultValue: 5
     }
+    section("Audio Notification for URGENT-HIGH") {
+    	paragraph "CGM data is above your expected range, an announcement will be made."
+        input "thresholdTooHigh", "number", title: "Set the level at which you don't want to be above", range: "150..400", defaultValue: 200
+    	input "skipTooHighRefresh", "number", title: "Minutes to wait between notifications", range: "5..60", defaultValue: 5
+    }
     section("Audio Notification for URGENT-LOW") {
     	paragraph "CGM data is below where it should be, an announcement will be made."
         input "thresholdTooLow", "number", title: "Set the level at which you have symptoms of low blood sugar", range: "40..150", defaultValue: 70
@@ -106,6 +111,7 @@ def initialize() {
     state.doubleDownCount = 0;
     state.singleDownCount = 0;
     state.tooLowCount = 0;
+    state.tooHighCount = 0;
     subscribe(app, appHandler)
     runEvery1Minute(refreshData)
 }
@@ -211,17 +217,18 @@ def getMessage(data) {
         log.debug "doubleDownCount: " + state.doubleDownCount
     	double dataMod = skipDoubleDownRefresh / 5
         if(data.reading.contains(state.OLD_MESSAGE) || state.doubleDownCount % dataMod.round(0) == 0)
-            message = "DOUBLE DOWN ALERT! " + getDefaultMessage(data, true);
+            message = "DOUBLE-ARROW DOWN ALERT! " + getDefaultMessage(data, true);
     } else {
         state.doubleDownCount = 0;
     }
     
     if(data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
+    	state.forceMessage = true;
         state.singleDownCount = state.singleDownCount + 1;
         log.debug "singleDownCount: " + state.singleDownCount;
     	double dataMod = skipSingleDownRefresh / 5
         if(data.reading.contains(state.OLD_MESSAGE) || state.singleDownCount % dataMod.round(0) == 0)
-            message = "SINGLE DOWN ALERT! " + getDefaultMessage(data, true);
+            message = "SINGLE-ARROW DOWN ALERT! " + getDefaultMessage(data, true);
     } else {
     	state.singleDownCount = 0;
     }
@@ -231,15 +238,25 @@ def getMessage(data) {
         log.debug "tooLowCount: " + state.tooLowCount;
     	double dataMod = skipTooLowRefresh / 5
         if(data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % dataMod.round(0) == 0)
-            message = "Urgent Low. " + getDefaultMessage(data, true);
+            message = "URGENT-LOW! " + getDefaultMessage(data, true);
     } else {
     	state.tooLowCount = 0;
     }
     
+    if(message == null && data.value >= thresholdTooHigh && data.delta > 0) {
+        state.tooHighCount = state.tooHighCount + 1;
+        log.debug "tooHighCount: " + state.tooHighCount;
+    	double dataMod = skipTooHighRefresh / 5
+        if(data.reading.contains(state.OLD_MESSAGE) || state.tooHighCount % dataMod.round(0) == 0)
+            message = "URGENT-HIGH! " + getDefaultMessage(data, true);
+    } else {
+    	state.tooHighCount = 0;
+    }
+    
     if(message == null && state.forceMessage) {
     	state.forceMessage = false;
-        log.debug "ForceMessage is true. Message is=" + message;
-    	message = getDefaultMessage(data, false);
+        log.debug "ForceMessage is true. Message is: " + message;
+    	message = getDefaultMessage(data, true);
     }
 
     return message;
