@@ -54,6 +54,7 @@ preferences {
     	paragraph "Set to ON if you need to mute all audio."
         input "isMuted", "boolean", title: "Mute"
         input "isPaused", "boolean", title: "Pause Automations", hideWhenEmpty: true
+        input "enableNotifications", "boolean", title: "Send push notifications"
     }
     section("Audio Devices") {
     	paragraph "Audio notifications will play on these devices. You can choose which modes this app works at the bottom of this page."
@@ -71,7 +72,7 @@ preferences {
     }
     section("Audio Notification for URGENT-LOW") {
     	paragraph "CGM data is below where it should be, an announcement will be made."
-        input "thresholdTooLow", "number", title: "Set the level at which you have symptoms of low blood sugar", range: "40..100", defaultValue: 70
+        input "thresholdTooLow", "number", title: "Set the level at which you have symptoms of low blood sugar", range: "40..150", defaultValue: 70
     	input "skipTooLowRefresh", "number", title: "Minutes to wait between notifications", range: "5..60", defaultValue: 5
     }
     section("Audio Notification for SINGLE-ARROW DOWN") {
@@ -140,6 +141,13 @@ def refreshData(){
             if(refreshDate < nowDate) {
                 log.info "Sugarmate - Refresh data..."   
                 def data = getData();
+                use(TimeCategory) {
+                    if(data.reading.contains(state.OLD_MESSAGE))
+                        state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate) + 325.seconds
+                    else
+                        state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp) + 325.seconds
+                    log.debug "Sugarmate - NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
+                } 
                 def message = getMessage(data);
                 audioSpeak(message);
             } else {
@@ -170,14 +178,6 @@ def getData() {
         if(resp.status == 200){
             // get the data from the response body
             log.debug "Sugarmate - Data: ${resp.data}"
-            use(TimeCategory) {
-            	if(resp.data.reading.contains(state.OLD_MESSAGE))
-                	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate) + 325.seconds
-                else
-                	state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", resp.data.timestamp) + 325.seconds                    
-                def nowDate = new Date()
-                log.debug "Sugarmate - NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
-            } 
             return resp.data;
         } else {
             // get the status code of the response
@@ -267,16 +267,17 @@ def getDefaultMessage(data, showDelta) {
     
     String message = null;
     if(data.reading.contains(state.OLD_MESSAGE))
-    	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}."
-    else
+    	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}"
+    else {
     	message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     
-    if(showDelta && data.delta < 0)
-    	message = message + " ${data.delta}";
-        
-    def minutesAgo = convertTimespanToMinutes(data);
-    if(minutesAgo >= 2)
-        message = message + " from ${minutesAgo} minutes ago";
+        if(showDelta && data.delta < 0)
+            message = message + " ${data.delta}";
+
+        def minutesAgo = convertTimespanToMinutes(data);
+        if(minutesAgo >= 2)
+            message = message + " from ${minutesAgo} minutes ago";
+    }
         
     return message;
 }
@@ -293,6 +294,14 @@ def audioSpeak(message) {
             audioSpeakers*.playTextAndRestore(message)
             alexaSpeakers*.playAnnouncement(message)
         }
+    }
+    if(enableNotifications)
+    	sendNotification(message)
+}
+
+def sendNotification(message){
+    if (sendPush && message) {
+        sendPush(message)
     }
 }
 
