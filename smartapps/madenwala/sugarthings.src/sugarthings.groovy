@@ -211,7 +211,7 @@ def getMessage(data) {
     	state.noDataCount = 0;
     }
 
-	if(data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
+	if(message == null && data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
     	state.forceMessage = true;
         state.doubleDownCount = state.doubleDownCount + 1
         log.debug "doubleDownCount: " + state.doubleDownCount
@@ -222,7 +222,7 @@ def getMessage(data) {
         state.doubleDownCount = 0;
     }
     
-    if(data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
+    if(message == null && data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
     	state.forceMessage = true;
         state.singleDownCount = state.singleDownCount + 1;
         log.debug "singleDownCount: " + state.singleDownCount;
@@ -234,6 +234,7 @@ def getMessage(data) {
     }
     
     if(message == null && data.value <= thresholdTooLow && data.delta < 0) {
+    	state.forceMessage = true;
         state.tooLowCount = state.tooLowCount + 1;
         log.debug "tooLowCount: " + state.tooLowCount;
     	double dataMod = skipTooLowRefresh / 5
@@ -283,7 +284,7 @@ def getDefaultMessage(data, showDelta) {
     else {
     	message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     
-        if(showDelta && data.delta < 0)
+        if(showDelta)
             message = message + " ${data.delta}";
 
         def minutesAgo = convertTimespanToMinutes(data);
