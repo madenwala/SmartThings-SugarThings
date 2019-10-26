@@ -14,10 +14,10 @@
  *
  */
 definition(
-    name: "Sugarmate",
+    name: "SugarThings",
     namespace: "madenwala",
     author: "Mohammed Adenwala",
-    description: "Sugarmate for SmartThings retrieves your GCM data and allows automations based on your GCM data.",
+    description: "SugarThings retrieves your Dexcom CGM readings from Sugarmate and allows audio notifications based on your data.",
     category: "My Apps",
     iconUrl: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
     iconX2Url: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
@@ -98,35 +98,30 @@ def updated() {
 	initialize()
 }
 
-
 def initialize() {
 	state.OLD_MESSAGE = "[OLD]"
 	state.forceMessage = false
-    state.nextMessageDate = new Date();
-    
+    state.nextMessageDate = new Date() -1;
     state.noDataCount = 0;
     state.doubleDownCount = 0;
     state.singleDownCount = 0;
     state.tooLowCount = 0;
-    
     subscribe(app, appHandler)
     runEvery1Minute(refreshData)
 }
 
 def appHandler(evt) {
-	//try {
+	try {
         log.debug "Sugarmate - App Event ${evt.value} received"
     	def data = getData()
     	def message = getMessage(data)
         if(message == null)
         	message = getDefaultMessage(data, false)
     	audioSpeak(message)
-        /*
     }
     catch(ex) {
-    	log.error "Sugarmate - Could not retrieve data: " + ex
+    	log.error "Sugarmate - Could not execute App Touch event: " + ex
     }
-    */
 }
 
 def refreshData(){
