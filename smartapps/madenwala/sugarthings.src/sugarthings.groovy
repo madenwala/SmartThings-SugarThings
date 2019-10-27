@@ -17,7 +17,7 @@ definition(
     name: "SugarThings",
     namespace: "madenwala",
     author: "Mohammed Adenwala",
-    description: "SugarThings retrieves your Dexcom CGM readings from SugarThings and allows audio notifications based on your data.",
+    description: "SugarThings for diabetics retrieves your Dexcom CGM readings from Sugarmate.io and allows audio notifications based on your blood sugar levels.",
     category: "My Apps",
     iconUrl: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
     iconX2Url: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
