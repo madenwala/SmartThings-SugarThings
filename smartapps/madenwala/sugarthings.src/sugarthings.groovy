@@ -1,5 +1,5 @@
 /**
- *  Sugarmate
+ *  SugarThings
  *
  *  Copyright 2019 Mohammed Adenwala
  *
@@ -17,7 +17,7 @@ definition(
     name: "SugarThings",
     namespace: "madenwala",
     author: "Mohammed Adenwala",
-    description: "SugarThings retrieves your Dexcom CGM readings from Sugarmate and allows audio notifications based on your data.",
+    description: "SugarThings retrieves your Dexcom CGM readings from SugarThings and allows audio notifications based on your data.",
     category: "My Apps",
     iconUrl: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
     iconX2Url: "https://sugarmate.io/assets/sugarmate-bf45d10bb97dfbe9587c0af8efc3e048ec35f7414d125b2af9f3132fd0e363a4.png",
@@ -118,7 +118,7 @@ def initialize() {
 
 def appHandler(evt) {
 	try {
-        log.debug "Sugarmate - App Event ${evt.value} received"
+        log.debug "SugarThings: App Event ${evt.value} received"
     	def data = getData()
     	def message = getMessage(data)
         if(message == null)
@@ -126,7 +126,7 @@ def appHandler(evt) {
     	audioSpeak(message)
     }
     catch(ex) {
-    	log.error "Sugarmate - Could not execute App Touch event: " + ex
+    	log.error "SugarThings: Could not execute App Touch event: " + ex
     }
 }
 
@@ -134,20 +134,20 @@ def refreshData(){
 	//try {
         if(isPaused.equals(true)) {
             // Do nothing while paused
-            log.debug "Sugarmate - Paused"
+            log.debug "SugarThings: Paused"
         } else {
             // Check how old data is and then if old, get data
             Date nowDate = new Date();
             Date refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate);
             if(refreshDate < nowDate) {
-                log.info "Sugarmate - Refresh data..."   
+                log.info "SugarThings: Refresh data..."   
                 def data = getData();
                 use(TimeCategory) {
                     if(data.reading.contains(state.OLD_MESSAGE))
                         state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate) + 325.seconds
                     else
                         state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp) + 325.seconds
-                    log.debug "Sugarmate - NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
+                    log.debug "SugarThings: NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
                 } 
                 def message = getMessage(data);
                 audioSpeak(message);
@@ -155,20 +155,20 @@ def refreshData(){
                 double totalSeconds = (refreshDate.time - nowDate.time) / 1000;
                 int minutes = (totalSeconds - (totalSeconds % 60)) / 60;    
                 double seconds = totalSeconds % 60;
-                log.debug "Sugarmate - No refresh data for another ${minutes} minute(s) ${seconds.round(0)} second(s) Next: ${state.nextMessageDate} Current: ${nowDate}"; 
+                log.debug "SugarThings: No refresh data for another ${minutes} minute(s) ${seconds.round(0)} second(s) Next: ${state.nextMessageDate} Current: ${nowDate}"; 
             }
         }
         /*
     }
     catch(ex) {
-    	log.error "Sugarmate - Could not refresh data: " + ex;
+    	log.error "SugarThings: Could not refresh data: " + ex;
     }
     */
 }
 
 def getData() {
 
-    log.debug "Sugarmate - Refresh Data from ${jsonUrl}"
+    log.debug "SugarThings: Refresh Data from ${jsonUrl}"
 
     def params = [
         uri: jsonUrl,
@@ -178,11 +178,11 @@ def getData() {
 	httpGet(params) { resp ->
         if(resp.status == 200){
             // get the data from the response body
-            log.debug "Sugarmate - Data: ${resp.data}"
+            log.debug "SugarThings: Data: ${resp.data}"
             return resp.data;
         } else {
             // get the status code of the response
-            log.debug "Sugarmate Status Code: ${resp.status}"
+            log.debug "SugarThings: Status Code: ${resp.status}"
             return null;
         }  
 	}
@@ -296,9 +296,9 @@ def getDefaultMessage(data, showDelta) {
 }
 
 def audioSpeak(message) {
-    log.info "Sugarmate - Message: " + message;
+    log.info "SugarThings: Message: " + message;
     if(isMuted != "true" && message) {
-    	log.debug "Sugarmate - Audio Speak: " + message;
+    	log.debug "SugarThings: Audio Speak: " + message;
         if(location.mode == 'Night') {
             audioSpeakersNight*.playTextAndRestore(message)
             alexaSpeakersNight*.playAnnouncement(message)
