@@ -284,13 +284,19 @@ def getDefaultMessage(data, showDelta) {
     else {
     	message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     
-        if(showDelta)
-            message = message + " ${data.delta}";
+        if(showDelta) {
+        	if(data.delta > 0)
+            	message = message + " up ${data.delta}"
+            else if(data.delta < 0)
+            	message = message + " down ${data.delta}"
+        }
 
         def minutesAgo = convertTimespanToMinutes(data);
         if(minutesAgo >= 2)
             message = message + " from ${minutesAgo} minutes ago";
     }
+    
+    message = message + "."
         
     return message;
 }
