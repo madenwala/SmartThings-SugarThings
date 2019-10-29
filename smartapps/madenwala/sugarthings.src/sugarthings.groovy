@@ -286,9 +286,9 @@ def getDefaultMessage(data, showDelta) {
     
         if(showDelta) {
         	if(data.delta > 0)
-            	message = message + " up ${data.delta}"
+            	message = message + " ${data.delta}"
             else if(data.delta < 0)
-            	message = message + " down ${data.delta}"
+            	message = message + " ${data.delta}"
         }
 
         def minutesAgo = convertTimespanToMinutes(data);
