@@ -53,7 +53,7 @@ preferences {
     section("Automations") {
     	paragraph "Set to ON if you need to mute all audio."
         input "isMuted", "boolean", title: "Mute"
-        input "isPaused", "boolean", title: "Pause Automations", hideWhenEmpty: true
+        input "isPaused", "boolean", title: "Pause Automations"
         input "enableNotifications", "boolean", title: "Send push notifications"
     }
     section("Audio Devices") {
@@ -68,7 +68,7 @@ preferences {
     }
     section("Audio Notification for NO DATA") {
     	paragraph "When there is no data from your CGM, meaning that CGM data is not being shared to Sugarmate, then we can announce that there is no data."
-    	input "skipNoDataRefresh", "number", title: "Minutes to wait between notification", description: "hello world", range: "5..60", defaultValue: 5
+    	input "skipNoDataRefresh", "number", title: "Minutes to wait between notification", description: "hello world", range: "5..120", defaultValue: 5
     }
     section("Audio Notification for URGENT-HIGH") {
     	paragraph "CGM data is above your expected range, an announcement will be made."
@@ -143,8 +143,13 @@ def refreshData(){
                 log.info "SugarThings: Refresh data..."   
                 def data = getData();
                 use(TimeCategory) {
-                    if(data.reading.contains(state.OLD_MESSAGE))
-                        state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate) + 325.seconds
+                    if(data.reading.contains(state.OLD_MESSAGE)) {
+                    	int secs = convertTimespanToSeconds(data.timestamp)
+                        log.debug "Seconds: " + secs
+                        secs = (secs - (secs % 325)) + 325
+                        log.debug "Seconds Next: " + secs
+                        state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp) + secs.seconds
+                    }
                     else
                         state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp) + 325.seconds
                     log.debug "SugarThings: NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
@@ -201,8 +206,8 @@ def getMessage(data) {
     	double dataMod = skipNoDataRefresh / 5
         if(state.noDataCount % dataMod.round(0) == 0) 
         	message = getDefaultMessage(data, false)
-        else 
-        	message = "";
+        //else 
+        	//message = "";
     } else {
         if(state.forceMessage && state.noDataCount > 0) {
         	state.forceMessage = false;
@@ -211,44 +216,54 @@ def getMessage(data) {
     	state.noDataCount = 0;
     }
 
-	if(message == null && data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
+	if(data.trend_words == "DOUBLE_DOWN" && data.value <= thresholdDoubleDown) {
     	state.forceMessage = true;
         state.doubleDownCount = state.doubleDownCount + 1
         log.debug "doubleDownCount: " + state.doubleDownCount
     	double dataMod = skipDoubleDownRefresh / 5
-        if(data.reading.contains(state.OLD_MESSAGE) || state.doubleDownCount % dataMod.round(0) == 0)
+        
+        if(state.doubleDownCount % dataMod.round(0) == 0) {
+        	if(data.reading.contains(state.OLD_MESSAGE)) 
+            	message = "OLD "
             message = "DOUBLE-ARROW DOWN ALERT! " + getDefaultMessage(data, true);
+        }
     } else {
         state.doubleDownCount = 0;
     }
     
-    if(message == null && data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
+    if(data.trend_words == "SINGLE_DOWN" && data.value <= thresholdSingleDown) {
     	state.forceMessage = true;
         state.singleDownCount = state.singleDownCount + 1;
         log.debug "singleDownCount: " + state.singleDownCount;
     	double dataMod = skipSingleDownRefresh / 5
-        if(data.reading.contains(state.OLD_MESSAGE) || state.singleDownCount % dataMod.round(0) == 0)
+        if(state.singleDownCount % dataMod.round(0) == 0) {
+            if(data.reading.contains(state.OLD_MESSAGE)) 
+            	message = "OLD "
             message = "SINGLE-ARROW DOWN ALERT! " + getDefaultMessage(data, true);
+        }
     } else {
     	state.singleDownCount = 0;
     }
     
-    if(message == null && data.value <= thresholdTooLow && data.delta < 0) {
+    if(data.value <= thresholdTooLow && data.delta < 0) {
     	state.forceMessage = true;
         state.tooLowCount = state.tooLowCount + 1;
         log.debug "tooLowCount: " + state.tooLowCount;
     	double dataMod = skipTooLowRefresh / 5
-        if(data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % dataMod.round(0) == 0)
+        if(data.reading.contains(state.OLD_MESSAGE) || state.tooLowCount % dataMod.round(0) == 0) {
+            if(data.reading.contains(state.OLD_MESSAGE)) 
+            	message = "OLD "
             message = "URGENT-LOW! " + getDefaultMessage(data, true);
+        }
     } else {
     	state.tooLowCount = 0;
     }
     
-    if(message == null && data.value >= thresholdTooHigh && data.delta > 0) {
+    if(data.value >= thresholdTooHigh && data.delta > 0) {
         state.tooHighCount = state.tooHighCount + 1;
         log.debug "tooHighCount: " + state.tooHighCount;
     	double dataMod = skipTooHighRefresh / 5
-        if(data.reading.contains(state.OLD_MESSAGE) || state.tooHighCount % dataMod.round(0) == 0)
+        if(state.tooHighCount % dataMod.round(0) == 0)
             message = "URGENT-HIGH! " + getDefaultMessage(data, true);
     } else {
     	state.tooHighCount = 0;
@@ -280,7 +295,7 @@ def getDefaultMessage(data, showDelta) {
     
     String message = null;
     if(data.reading.contains(state.OLD_MESSAGE))
-    	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}"
+    	message = "No data from ${personName} for the last ${convertTimespanToMinutes(data.timestamp)} minutes. Last reading was ${data.value} ${trendWords[data.trend_words]}"
     else {
     	message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     
@@ -291,7 +306,7 @@ def getDefaultMessage(data, showDelta) {
             	message = message + " ${data.delta}"
         }
 
-        def minutesAgo = convertTimespanToMinutes(data);
+        def minutesAgo = convertTimespanToMinutes(data.timestamp);
         if(minutesAgo >= 2)
             message = message + " from ${minutesAgo} minutes ago";
     }
@@ -314,7 +329,7 @@ def audioSpeak(message) {
             alexaSpeakers*.playAnnouncement(message)
         }
     }
-    if(enableNotifications)
+    if(enableNotifications == 'true')
     	sendNotification(message)
 }
 
@@ -324,9 +339,9 @@ def sendNotification(message){
     }
 }
 
-def convertTimespanToMinutes(data) {
+def convertTimespanToMinutes(timestamp) {
     // Parse the data timestamp
-    def dataDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp);
+    def dataDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", timestamp);
     def nowDate = new Date();
     // Convert milliseconds to seconds
     double seconds = (nowDate.time - dataDate.time) / 1000;
@@ -334,4 +349,13 @@ def convertTimespanToMinutes(data) {
     int minutes = (seconds - (seconds % 60)) / 60;
     // Return the minutes
     return minutes;
+}
+
+def convertTimespanToSeconds(timestamp) {
+    // Parse the data timestamp
+    def dataDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", timestamp)
+    def nowDate = new Date()
+    // Convert milliseconds to seconds
+    double seconds = (nowDate.time - dataDate.time) / 1000
+    return seconds.round(0)
 }
