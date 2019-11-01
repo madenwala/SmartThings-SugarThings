@@ -122,7 +122,7 @@ def appHandler(evt) {
     	def data = getData()
     	def message = getMessage(data)
         if(message == null)
-        	message = getDefaultMessage(data, false)
+        	message = getDefaultMessage(data, true)
     	audioSpeak(message)
     }
     catch(ex) {
@@ -137,30 +137,17 @@ def refreshData(){
             log.debug "SugarThings: Paused"
         } else {
             // Check how old data is and then if old, get data
-            Date nowDate = new Date();
-            Date refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate);
-            if(refreshDate < nowDate) {
+            Date nowDate = new Date()
+            Date refreshDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", state.nextMessageDate)
+            if(refreshDate <= nowDate) {
                 log.info "SugarThings: Refresh data..."   
-                def data = getData();
-                use(TimeCategory) {
-                    if(data.reading.contains(state.OLD_MESSAGE)) {
-                    	int secs = convertTimespanToSeconds(data.timestamp)
-                        log.debug "Seconds: " + secs
-                        secs = (secs - (secs % 325)) + 325
-                        log.debug "Seconds Next: " + secs
-                        state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp) + secs.seconds
-                    }
-                    else
-                        state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp) + 325.seconds
-                    log.debug "SugarThings: NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
-                } 
-                def message = getMessage(data);
-                audioSpeak(message);
+                def data = getData()
+				updateNextReadingTime(data)
+                def message = getMessage(data)
+                audioSpeak(message)
             } else {
-                double totalSeconds = (refreshDate.time - nowDate.time) / 1000;
-                int minutes = (totalSeconds - (totalSeconds % 60)) / 60;    
-                double seconds = totalSeconds % 60;
-                log.debug "SugarThings: No refresh data for another ${minutes} minute(s) ${seconds.round(0)} second(s) Next: ${state.nextMessageDate} Current: ${nowDate}"; 
+                double totalSeconds = (refreshDate.time - nowDate.time) / 1000
+                log.debug "SugarThings: No refresh data for another ${totalSeconds.round(0)} second(s): Next: ${refreshDate} Current: ${nowDate}"
             }
         }
         /*
@@ -300,8 +287,8 @@ def getDefaultMessage(data, showDelta) {
     	message = "${personName} is ${data.value} ${trendWords[data.trend_words]}";
     
         if(showDelta) {
-        	if(data.delta > 0)
-            	message = message + " ${data.delta}"
+        	if(data.delta >= 0)
+            	message = message + " +${data.delta}"
             else if(data.delta < 0)
             	message = message + " ${data.delta}"
         }
@@ -358,4 +345,14 @@ def convertTimespanToSeconds(timestamp) {
     // Convert milliseconds to seconds
     double seconds = (nowDate.time - dataDate.time) / 1000
     return seconds.round(0)
+}
+
+def updateNextReadingTime(data) {
+    use(TimeCategory) {
+        int readingTimeGap = 315
+        int secs = convertTimespanToSeconds(data.timestamp)
+        secs = (secs - (secs % readingTimeGap)) + readingTimeGap
+        state.nextMessageDate = Date.parse("yyyy-MM-dd'T'HH:mm:ss", data.timestamp) + secs.seconds
+        log.debug "SugarThings: NEXT REFRESH: ${state.nextMessageDate}  CURRENT: ${nowDate}"
+    } 
 }
