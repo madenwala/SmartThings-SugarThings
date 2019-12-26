@@ -61,11 +61,6 @@ preferences {
         input "audioSpeakers", "capability.audioNotification", title: "Audio Devices", multiple: true, required: false
         input "alexaSpeakers", "device.echoSpeaksDevice", title: "Alexa Devices", multiple: true, required: false
     }
-    section("Audio Devices during Night mode") {
-    	paragraph "If this app supports Night mode, then when in Night mode, audio notifications will only play on these devices."
-        input "audioSpeakersNight", "capability.audioNotification", title: "Audio Devices", multiple: true, required: false
-        input "alexaSpeakersNight", "device.echoSpeaksDevice", title: "Alexa Devices", multiple: true, required: false
-    }
     section("Audio Notification for NO DATA") {
     	paragraph "When there is no data from your CGM, meaning that CGM data is not being shared to Sugarmate, then we can announce that there is no data."
     	input "skipNoDataRefresh", "number", title: "Minutes to wait between notification", description: "hello world", range: "5..120", defaultValue: 5
@@ -306,15 +301,12 @@ def getDefaultMessage(data, showDelta) {
 def audioSpeak(message) {
     log.info "SugarThings: Message: " + message;
     if(isMuted != "true" && message) {
-    	log.debug "SugarThings: Audio Speak: " + message;
-        if(location.mode == 'Night') {
-            audioSpeakersNight*.playTextAndRestore(message)
-            alexaSpeakersNight*.playAnnouncement(message)
+    	log.debug "SugarThings: Audio Speak: " + message
+        log.debug alexaSpeakers[0]
+        if(alexaSpeakers) {
+        	alexaSpeakers*.playAnnouncement(message)
         }
-        else {
-            audioSpeakers*.playTextAndRestore(message)
-            alexaSpeakers*.playAnnouncement(message)
-        }
+        audioSpeakers*.playTextAndRestore(message)
     }
     if(enableNotifications == 'true')
     	sendNotification(message)
